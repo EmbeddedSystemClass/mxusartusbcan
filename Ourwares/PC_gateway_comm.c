@@ -450,9 +450,9 @@ int PC_msg_prepASCII(struct SERIALSENDTASKBCB** ppbcb, struct PCTOGATECOMPRESSED
 	struct SERIALSENDTASKBCB* pbcb = *ppbcb;
 
 	/* Block if this buffer is not available. */
-	vSerialTaskSendWait(pbcb); // Wait for buffer to be released
+	xSemaphoreTake(pbcb->semaphore, 0);
 
-	char* pout = pbcb->pbuf;	// Output buffer pointer
+	char* pout = (char*)pbcb->pbuf;	// Output buffer pointer
 
 	u8* pin = &p->cm[0];	// Pointer to CAN binary msg
 	char *p2 = pout;	// Working pointer

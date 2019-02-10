@@ -183,7 +183,6 @@ taskEXIT_CRITICAL();
 	return 0;
 }
 
-
 /* *************************************************************************
  * void StartSerialTaskSend(void const * argument);
  *	@brief	: Task startup
@@ -204,7 +203,7 @@ void StartSerialTaskSend(void* argument1)
 			Qret = xQueueReceive(SerialTaskSendQHandle,&pssb,portMAX_DELAY);
 			if (Qret == pdPASS) // Break loop if not empty
 				break;
-		} while ((pssb->phuart == NULL) || (pssb->pbuf == NULL) || (pssb->tskhandle == NULL));
+		} while ((pssb->phuart == NULL) || (pssb->tskhandle == NULL));
 
 		/* Add Q item to linked list for this uart/usart */
 
@@ -212,11 +211,18 @@ void StartSerialTaskSend(void* argument1)
 		ptmp = pbhd;
 		while (ptmp->phuart != pssb->phuart) ptmp = ptmp->pnext;
 
+	 	if ((pssb->pbuf == NULL) || (pssb->size == 0))
+		{ // Here, HAL is going to reject it
+  			/* Release buffer just sent to it can be reused. */
+			xSemaphoreGive(pssb->semaphore);
+			return;
+		}
+
 		/* Add bcb to circular buffer for this uart/usart */
 		*ptmp->padd = pssb; //Copy BCB pointer into circular buffer
 
 		ptmp->padd += 1;	// Advance list ptr with wraparound
-		if (ptmp->padd >= ptmp->pend) ptmp->padd = ptmp->pbegin;
+		if (ptmp->padd == ptmp->pend) ptmp->padd = ptmp->pbegin;
 		{		
       /* If HAL for this uart/usart is busy nothing happens. */
 			if (ptmp->dmaflag == 0) // send buffer via char-by-char or dma 
@@ -259,27 +265,25 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *phuart)
 {
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-	struct SERIALSENDTASKBCB* pbcb;
-	struct SSCIRBUF* ptmp1;
+	struct SERIALSENDTASKBCB* pbcb; // Buffer control block ptr
+	struct SSCIRBUF* ptmp1;	// Linked list of usarts
 
 	/* Find bcb circular buffer for this uart */
-	ptmp1 = pbhd;
+	ptmp1 = pbhd; // Polnt to first on list
 	while (ptmp1->phuart != phuart) 
 	{
-		ptmp1 = ptmp1->pnext;
+		ptmp1 = ptmp1->pnext; // Step to next uart
 	}
 
-   /* Notify originating task that the buffer pointed to by the control 
-      block has been sent. */
+	/* Pointr to buffer control block for next buffer to send. */
 	pbcb = *ptmp1->ptake;
-	xTaskNotifyFromISR(pbcb->tskhandle, 
-		pbcb->notebit,	/* 'or' bit assigned to buffer to notification value. */
-		eSetBits,      /* Set 'or' option */
-		&xHigherPriorityTaskWoken ); 
+
+   /* Release buffer just sent to it can be reused. */
+	xSemaphoreGiveFromISR( pbcb->semaphore, &xHigherPriorityTaskWoken );
 
 	/* Advance 'take' pointer of circular buffer. */
 	ptmp1->ptake += 1;	// Advance ptr with wraparound
-	if (ptmp1->ptake >= ptmp1->pend) ptmp1->ptake = ptmp1->pbegin;	
+	if (ptmp1->ptake == ptmp1->pend) ptmp1->ptake = ptmp1->pbegin;	
 
 	/* If more bcb remain in the buffer start the next sending. */
 	if (ptmp1->ptake != ptmp1->padd)
@@ -293,20 +297,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *phuart)
 	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 	return;
 }
-/* *************************************************************************
- * void vSerialTaskSendWait(struct SERIALSENDTASKBCB* pbcb);
- *	@brief	: Wait for buffer to be released with notification
- * @param	: pbcb = Pointer to Buffer Control Block
- * @param	: pnoteval = Pointer to 'noteval' which receives notification word
- * *************************************************************************/
-void vSerialTaskSendWait(struct SERIALSENDTASKBCB* pbcb)
-{
-	while ( (*(pbcb->pnoteval) & pbcb->notebit) == 0)
-	{
-		xTaskNotifyWait(pbcb->notebit, 0, pbcb->pnoteval, 5000);
-	}
-	return;
-}
+
 /* *************************************************************************
  * void vSerialTaskSendQueueBuf(struct SERIALSENDTASKBCB** ppbcb);
  *	@brief	: Load buffer control block onto queue for sending
@@ -314,12 +305,13 @@ void vSerialTaskSendWait(struct SERIALSENDTASKBCB* pbcb)
  * *************************************************************************/
 void vSerialTaskSendQueueBuf(struct SERIALSENDTASKBCB** ppbcb)
 {
-	struct SERIALSENDTASKBCB* pbcb = *ppbcb;
 	uint32_t qret;
-	*(pbcb->pnoteval) &= ~(pbcb->notebit);
+
 	do 
 	{
 		qret=xQueueSendToBack(SerialTaskSendQHandle, ppbcb, portMAX_DELAY);
+		if (qret == errQUEUE_FULL) osDelay(1); // Delay, don't spin.
+
 	} while(qret == errQUEUE_FULL);
 	return;
 }

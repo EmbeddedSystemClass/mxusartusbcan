@@ -44,8 +44,9 @@ int yprintf(struct SERIALSENDTASKBCB** ppbcb, const char *fmt, ...)
 
 	yprintf_init();	// JIC not init'd
 
-	/* Block if this buffer is not available. */
-	vSerialTaskSendWait(pbcb); // Wait for buffer to be released
+	/* Block if this buffer is not available. SerialSendTask will 'give' the semaphore 
+      when the buffer has been sent. */
+	xSemaphoreTake(pbcb->semaphore, 6000);
 
 	/* Block if vsnprintf is being uses by someone else. */
 	xSemaphoreTake( vsnprintfSemaphoreHandle, portMAX_DELAY );
@@ -72,18 +73,21 @@ int yprintf(struct SERIALSENDTASKBCB** ppbcb, const char *fmt, ...)
 	return pbcb->size;
 }
 /* **************************************************************************************
- * int yputs(struct SERIALSENDTASKYCB* pbcb, char* pchr);
+ * int yputs(struct SERIALSENDTASKBCB** ppbcb, char* pchr);
  * @brief	: Send zero terminated string to SerialTaskSend
  * @param	: pbcb = pointer to pointer to stuct with uart pointers and buffer parameters
  * @return	: Number of chars sent
  * ************************************************************************************** */
-int yputs(struct SERIALSENDTASKYCB** ppbcb, char* pchr)
+int yputs(struct SERIALSENDTASKBCB** ppbcb, char* pchr)
 {
 	struct SERIALSENDTASKBCB* pbcb = *ppbcb;
 	int sz = strlen(pchr); // Check length of input string
 	if (sz == 0) return 0;
 
-	vSerialTaskSendWait(pbcb); // Wait for buffer to be released	
+	/* Block if this buffer is not available. SerialSendTask will 'give' the semaphore 
+      when the buffer has been sent. */
+	xSemaphoreTake(pbcb->semaphore, 6000);
+
 	strncpy((char*)pbcb->pbuf,pchr,pbcb->maxsize);	// Copy and limit size.
 
 	/* Set size serial send will use. */

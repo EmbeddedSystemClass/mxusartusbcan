@@ -97,10 +97,10 @@ struct CAN_CTLBLOCK* can_iface_init(CAN_HandleTypeDef *phcan, uint32_t numtx)
 
 	struct CAN_POOLBLOCK* plst;
 	struct CAN_POOLBLOCK* ptmp;
-
+taskENTER_CRITICAL();
 	/* Get a control block for this CAN module. */
 	pctl = (struct CAN_CTLBLOCK*)calloc(1, sizeof(struct CAN_CTLBLOCK));
-	if (pctl == NULL) return NULL;
+	if (pctl == NULL){ taskEXIT_CRITICAL();return NULL;}
 
 	/* Add HAL CAN control block "handle" to our control block */
 	pctl->phcan = phcan; 
@@ -112,7 +112,10 @@ struct CAN_CTLBLOCK* can_iface_init(CAN_HandleTypeDef *phcan, uint32_t numtx)
 		while (ppx != ppctllist)
 		{
 			if ( (*ppx)->phcan == phcan)
+			{
+				taskEXIT_CRITICAL();
 				return NULL; // Duplicate
+			}
 			ppx++;;
 		}
 	}
@@ -123,7 +126,7 @@ struct CAN_CTLBLOCK* can_iface_init(CAN_HandleTypeDef *phcan, uint32_t numtx)
 	/* Save control block pointer on list, and advance list pointer */
 	*ppctllist = pctl;	
 	ppctllist++;
-	if (ppctllist == &pctllist[MAXCANMODULES]) return NULL; //JIC too many entries
+	if (ppctllist == &pctllist[MAXCANMODULES]) { taskEXIT_CRITICAL();return NULL;} //JIC too many entries
 	
 	/* Now that we have control block in memory, we can use it to return errors. 
 	   by setting the error code in pctl->ret. */
@@ -131,7 +134,7 @@ struct CAN_CTLBLOCK* can_iface_init(CAN_HandleTypeDef *phcan, uint32_t numtx)
 	/* Get CAN xmit linked list. */	
 	if (numtx == 0)  {pctl->ret = -1; return pctl;} // Bogus tx buffering count
 	ptmp = (struct CAN_POOLBLOCK*)calloc(numtx, sizeof(struct CAN_POOLBLOCK));
-	if (ptmp == NULL){pctl->ret = -2; return pctl;} // Get buff failed
+	if (ptmp == NULL){pctl->ret = -2; taskEXIT_CRITICAL(); return NULL;} // Get buff failed
 
 	/* Initialize links.  All are in the "free" list. */
 	// Item: the last block is left with NULL in plinknext
@@ -141,6 +144,7 @@ struct CAN_CTLBLOCK* can_iface_init(CAN_HandleTypeDef *phcan, uint32_t numtx)
 		plst->plinknext = ptmp;
 		plst = ptmp++;
 	} 
+taskEXIT_CRITICAL();
 	return pctl;	// Return pointer to control block
 }
 /******************************************************************************
@@ -162,7 +166,7 @@ extern uint32_t debugTX1c;
 int can_driver_put(struct CAN_CTLBLOCK* pctl,struct CANRCVBUF *pcan,uint8_t maxretryct,uint8_t bits)
 {
 	volatile struct CAN_POOLBLOCK* pnew;
-	struct CAN_POOLBLOCK* pfor; 	// Loop pointer for the 'for’ loop.
+	volatile struct CAN_POOLBLOCK* pfor; 	// Loop pointer for the 'for’ loop.
 
 	/* Reject CAN msg if CAN id is "bogus". */
 	// If 11b is specified && bits in extended address are present it is bogus
@@ -344,7 +348,7 @@ void HAL_CAN_TxMailbox0CompleteCallback(CAN_HandleTypeDef *phcan)
 
 	/* Loop back CAN msgs being sent. */
 #ifdef CANMSGLOOPBACK
-	struct CAN_POOLBLOCK* p = pctl->pend.plinknext;
+volatile	struct CAN_POOLBLOCK* p = pctl->pend.plinknext;
 	struct CANRCVBUFN ncan;
 	ncan.pctl = pctl;
 	ncan.can = p->can;

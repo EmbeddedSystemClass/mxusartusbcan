@@ -221,11 +221,11 @@ DiscoveryF4 LEDs --
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of myTask02 */
-  osThreadDef(myTask02, StartTask02, osPriorityIdle, 0, 384);
+  osThreadDef(myTask02, StartTask02, osPriorityNormal, 0, 384);
   myTask02Handle = osThreadCreate(osThread(myTask02), NULL);
 
-  /* definition and creation of myTask03 */
-  osThreadDef(myTask03, StartTask03, osPriorityIdle, 0, 300);
+  /* definition and creation of myTask03 *UART_HandleTypeDef huart6 */
+  osThreadDef(myTask03, StartTask03, osPriorityNormal, 0, 300);
   myTask03Handle = osThreadCreate(osThread(myTask03), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -242,7 +242,7 @@ DiscoveryF4 LEDs --
 	if (ret < 0) while(1==1); // Maybe add panic led flashing here?
 
 	/* Add bcb circular buffer to SerialTaskSend for usart2 */
-	#define NUMCIRBCB2  4 // Size of circular buffer of BCB for usart2
+	#define NUMCIRBCB2  12 // Size of circular buffer of BCB for usart2
 	ret = xSerialTaskSendAdd(&huart2, NUMCIRBCB2, 1); // dma
 	if (ret < 0) while(1==1); // Maybe add panic led flashing here?
 
@@ -272,15 +272,15 @@ DiscoveryF4 LEDs --
 //	vTaskPrioritySet( CanTask01Handle, 3);
 
   /* definition and creation of CanTxTask - CAN driver TX interface. */
-  Qidret = xCanTxTaskCreate(5, 32); // CanTask priority, Number of msgs in queue
+  Qidret = xCanTxTaskCreate(0, 32); // CanTask priority, Number of msgs in queue
 	if (Qidret < 0) while(1==1); // Maybe add panic led flashing here?
 
   /* definition and creation of CanRxTask - CAN driver RX interface. */
-  Qidret = xCanRxTaskCreate(3, 64); // CanTask priority, Number of msgs in queue
+  Qidret = xCanRxTaskCreate(1, 32); // CanTask priority, Number of msgs in queue
 	if (Qidret < 0) while(1==1); // Maybe add panic led flashing here?
 
 	/* Setup TX linked list for CAN1  */
-	pctl1 = can_iface_init(&hcan1, 16);
+	pctl1 = can_iface_init(&hcan1, 64);
 	if (pctl1 == NULL) while(1==1); // Maybe add panic led flashing here?
 
 	/* Setup TX linked list for CAN2  */
@@ -663,21 +663,11 @@ static void MX_GPIO_Init(void)
 ***********************************************************************************/
 void StartCanTask01(void const * argument)
 {
-	/* Assign bit position for each buffer in this task */
-	#define TSK01BUFBIT00 (1 << 0)	// Unique bit in notefication word for second buffer 
-
-	/* FreeRTOS copies its 'notification' word to the following upon a Notify. */
-	uint32_t noteval = 0;
-	
-	/* Malloc a serial buffer control block and buffer & initial 'noteval'. */
-	#define BUF1Z 96
-	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart6,BUF1Z,TSK01BUFBIT00,&noteval);
+	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart6,96);
 	if (pbuf1 == NULL) while(1==1);
 
-	/* Malloc serial buffer as above, but used augmented struct for use with 'yprintf' */
-	#define BUF2Z 96
-	#define TSK01BUFBIT01 (1 << 1)	// Unique bit in notefication word for second buffer 
-	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart6,BUF2Z,TSK01BUFBIT01,&noteval);
+	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart6,96);
+	if (pbuf1 == NULL) while(1==1);
 
 	int ctr = 0; // Running count
 
@@ -777,16 +767,14 @@ xQueueSendToBack(CdcTxTaskSendQHandle,&cdc1,5000);
 
 
 	/* Assign notification bits for this task */
-	#define TSKDEFBUFBIT00 0x1	// Assign notification bit position to buffer bufy1
-	#define TSKDEFBUFBIT01 0x2	// Assign notification bit position to buffer bufy2
 	#define TSKDEFBUFBIT02 0x4	// Assign notification bit position to ADC ???
 
 	/* FreeRTOS notifications to this task sets bits in this word. */
 //26	uint32_t noteval = 0; 
 
 	/* Malloc a serial buffer control block and buffer. Initial noteval. */
-//2	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart2,64,TSKDEFBUFBIT00,&noteval);
-//6	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart6,32,TSKDEFBUFBIT01,&noteval);
+//2	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart2,64);
+//6	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart6,32);
 
 	int ctr = 0;
 
@@ -836,7 +824,7 @@ xSemaphoreGive( vsnprintfSemaphoreHandle );
 /* ==== CAN MSG sending test ===== */
 	/* Place test CAN msg to send on queue in a burst. */
 	/* Note: an odd makes the LED flash since it toggles on each msg. */
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < 7; i++)
 		xQueueSendToBack(CanTxQHandle,&testtx,portMAX_DELAY);
   }
 
@@ -861,13 +849,8 @@ void StartTask02(void const * argument)
 	char* pline;	// Pointer to line buffer
 
 	#define TSK02BIT00	(1 << 0)  // Task notification bit for serial input (SerialTaskReceive.c)
-	#define TSK02BIT01	(1 << 1)  // Task notification bit for serial output buff 21
 	#define TSK02BIT02	(1 << 2)  // Task notification bit for ADC dma 1st 1/2 (adctask.c)
 	#define TSK02BIT03	(1 << 3)  // Task notification bit for ADC dma end (adctask.c)
-	#define TSK02BIT04	(1 << 4)  // Task notification bit for serial output buff 24
-	#define TSK02BIT05	(1 << 5)  // Task notification bit for serial output buff 25
-	#define TSK02BIT06	(1 << 6)  // Task notification bit for serial output buff 26
-	#define TSK02BIT07	(1 << 7)  // Task notification bit for serial output buff 27
 
 /* Notefication on multiple bits-- 
 
@@ -908,11 +891,11 @@ osDelay(512/4); // Needed for initialization?  Need to investigate.
 
 
 	/* Setup serial output for uart. */
-	struct SERIALSENDTASKBCB* pbuf21 = getserialbuf(&huart6,96,TSK02BIT01,&noteval);
-	struct SERIALSENDTASKBCB* pbuf24 = getserialbuf(&huart6,24,TSK02BIT04,&noteval);
-	struct SERIALSENDTASKBCB* pbuf25 = getserialbuf(&huart6,64,TSK02BIT05,&noteval);
-	struct SERIALSENDTASKBCB* pbuf26 = getserialbuf(&huart6,64,TSK02BIT06,&noteval);
-	struct SERIALSENDTASKBCB* pbuf27 = getserialbuf(&huart6,64,TSK02BIT07,&noteval);
+	struct SERIALSENDTASKBCB* pbuf21 = getserialbuf(&huart6,96);
+	struct SERIALSENDTASKBCB* pbuf24 = getserialbuf(&huart6,24);
+	struct SERIALSENDTASKBCB* pbuf25 = getserialbuf(&huart6,64);
+	struct SERIALSENDTASKBCB* pbuf26 = getserialbuf(&huart6,64);
+	struct SERIALSENDTASKBCB* pbuf27 = getserialbuf(&huart6,64);
 
 /* sscanf testing */
 double d1 = 0;
@@ -920,7 +903,7 @@ double d2 = 0;
 int64_t nn = 0;
 
 yscanf_init(); // Get semaphore for sscanf
-// 3.1415926535897932 3.1415926535897932 10  easy to copy to minicom
+// 3.1415926535897932 3.1415926535897932 10 
 // 3.14 3.14 10
 
 /*
@@ -1055,20 +1038,9 @@ void StartTask03(void const * argument)
 {
   /* USER CODE BEGIN StartTask03 */
 
-	/* FreeRTOS notifications to this task sets bits in this word. */
-	uint32_t noteval = 0; 
-
-	/* Assign notification bits for this task */
-	#define TSK03BUFBIT00 0x01	// Assign notification bit position to this buffer
-	#define TSK03BUFBIT01 0x02	// Assign notification bit position to this buffer
-	#define TSK03BUFBIT02 0x04	// Assign notification bit position to this buffer
-	#define TSK03BUFBIT03 0x08	// Assign notification bit position to this buffer
-
-	/* Malloc serial buffer as above, but used augmented struct for use with 'yprintf' */
-	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart6,128,TSK03BUFBIT00,&noteval);
-//	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart2,100,TSK03BUFBIT01,&noteval);
-	struct SERIALSENDTASKBCB* pbuf3 = getserialbuf(&huart2,128,TSK03BUFBIT02,&noteval);
-//	struct SERIALSENDTASKBCB* pbuf4 = getserialbuf(&huart6,130,TSK03BUFBIT03,&noteval);
+	/* Get buffer with buffer control block and semaphore for use with 'yprintf' */
+	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart6,128);
+	struct SERIALSENDTASKBCB* pbuf3 = getserialbuf(&huart2,128);
 
 	/* Testing CAN rcv */
    BaseType_t Qret;	// queue receive return
@@ -1081,6 +1053,8 @@ uint32_t debugctr = 0;
 uint32_t debugctr_prev = 0;
 extern uint32_t debug1;
 uint32_t debug1prev=debug1;
+
+//osDelay(6000); // Debug delay
 
 // DTW Cycles max for--
 // 9498508 1328 gateway_comm_CANtoPC
@@ -1102,13 +1076,13 @@ debug03 += 1;	// CAN msg count for Task 01 output
 			/* Version using PC_gateway_comm and USB_PC_gateway */
 
 		/* Original version w mods for loading queue */
-//			gateway_comm_CANtoPC(pbuf3, &ncan.can);
+//			xSemaphoreTake(pbuf3->semaphore, 0);
+//			gateway_comm_CANtoPC(&pbuf3, &ncan.can);
 
 		/* Newer version with limited options but better efficiency. */
-	vSerialTaskSendWait(pbuf3); // Wait for buffer to be released
+	xSemaphoreTake(pbuf3->semaphore, 5000);
 		gateway_CANtoPC(&pbuf3, &ncan.can);
 	vSerialTaskSendQueueBuf(&pbuf3); // Place on queue
-
 
 			if ((ncan.can.id == 0x00400000) && (ncan.can.cd.uc[0] == 0))
 			{

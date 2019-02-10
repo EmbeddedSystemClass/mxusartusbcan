@@ -22,6 +22,11 @@ int yprintf(struct SERIALSENDTASKBCB** ppbcb, const char *fmt, ...);
  * @param	: ... = usual printf arguments
  * @return	: Number of chars "printed"
  * ************************************************************************************** */
+int yputs(struct SERIALSENDTASKBCB** ppbcb, char* pchr);
+/* @brief	: Send zero terminated string to SerialTaskSend
+ * @param	: pbcb = pointer to pointer to stuct with uart pointers and buffer parameters
+ * @return	: Number of chars sent
+ * ************************************************************************************** */
 
 extern osSemaphoreId vsnprintfSemaphoreHandle;
 

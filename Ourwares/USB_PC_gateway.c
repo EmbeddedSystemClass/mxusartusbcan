@@ -190,7 +190,7 @@ int USB_toPC_msgBIN(struct SERIALSENDTASKBCB** ppbcb, struct PCTOGATECOMPRESSED*
  * ************************************************************************************** */
 int USB_toPC_msg_mode(struct SERIALSENDTASKBCB** ppbcb, struct PCTOGATEWAY* ptr, struct CANRCVBUF* pcan)
 {
-	struct SERIALSENDTASKBCB* pbcb = *ppbcb;
+//	struct SERIALSENDTASKBCB* pbcb = *ppbcb;
 	switch (ptr->mode_link)	// 'switch' for just two cases is lame, but allow for many more modes.
 	{
 	case 0:	// BINARY Mode: PC<->gateway
@@ -200,12 +200,12 @@ int USB_toPC_msg_mode(struct SERIALSENDTASKBCB** ppbcb, struct PCTOGATEWAY* ptr,
 
 	case 1: // ASCII/HEX mode: PC<->gateway (same "strong" compression as case 0 above)
 		CANcompress(&ptr->cmprs, pcan);		// Heavy compression
-		return USB_toPC_msgASCII(pbcb, &ptr->cmprs);
+		return USB_toPC_msgASCII(ppbcb, &ptr->cmprs);
 		break; // JIC
 
 	case 2: // ASCII/HEX Gonzaga format (minimal compression)
 		CANcompress_G(&ptr->cmprs, pcan);	// dlc = one byte the only compression
-		return USB_toPC_msgASCII(pbcb, &ptr->cmprs);
+		return USB_toPC_msgASCII(ppbcb, &ptr->cmprs);
 		break;
 	}
 	return -1;

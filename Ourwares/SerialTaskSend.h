@@ -37,11 +37,10 @@ struct SERIALSENDTASKBCB
 {
 	UART_HandleTypeDef* phuart; // Pointer to 'MX uart handle
 	osThreadId tskhandle;       // Task handle of originating task
+	SemaphoreHandle_t semaphore;// Semaphore hanlde
 	uint8_t	*pbuf;             // Pointer to byte buffer to be sent
-	uint32_t notebit;           // Buffer notification bit
-	uint32_t* pnoteval;    // Pointer to notification work in task
 	uint16_t size;              // Number of bytes to be sent
-	uint16_t maxsize;      // Buffer size 		
+	uint16_t maxsize;           // Buffer size 		
 };
 
 /* *************************************************************************/
@@ -59,11 +58,6 @@ osThreadId xSerialTaskSendCreate(uint32_t taskpriority);
  * *************************************************************************/
  void vStartSerialTaskSend(void);
 /*	@brief	: Task startup
- * *************************************************************************/
-void vSerialTaskSendWait(struct SERIALSENDTASKBCB* pbcb);
-/*	@brief	: Wait for buffer to be released with notification
- * @param	: pbcb = Pointer to Buffer Control Block
- * @param	: pnoteval = Pointer to 'noteval' which receives notification word
  * *************************************************************************/
 void vSerialTaskSendQueueBuf(struct SERIALSENDTASKBCB** ppbcb);
 /*	@brief	: Load buffer control block onto queue for sending

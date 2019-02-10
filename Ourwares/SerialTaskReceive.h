@@ -29,15 +29,16 @@ struct SERIALRCVBCB
 	UART_HandleTypeDef* phuart;// Pointer to 'MX uart handle
 	osThreadId tskhandle;      // Task handle of originating task
 	uint32_t  notebit;         // Unique notification bit (within task)
-	uint32_t* pnoteval;         // Pointer to word receiving notification 
-	char*  pbegindma;       // Pointer to beginning of dma buffer
-	char*  penddma;         // Pointer to ebd + 1 of dma buffer
-	char*  ptakedma;        // Pointer to last + 1 char taken from dma buffer
+	uint32_t* pnoteval;        // Pointer to word receiving notification 
+	char*  pbegindma;          // Pointer to beginning of dma buffer
+	char*  penddma;            // Pointer to ebd + 1 of dma buffer
+	char*  ptakedma;           // Pointer to last + 1 char taken from dma buffer
 	uint32_t  numlinexsize;    // Number of lines * line size (chars)
 	uint16_t  linesize;        // Number of chars in each line buffer
 	uint16_t  dmasize;         // Number of chars in total circular DMA buffer
 	uint8_t   numline;         // Number of line buffers for this uart
 	int8_t    dmaflag;         // dmaflag = 0 for char-by-char mode; 1 = dma mode
+	uint8_t   CANmode;         // 0 = ordinary lines; 1 = ascii/hex CAN
 	uint32_t errorct;				// uart error callback counter
 };
 
