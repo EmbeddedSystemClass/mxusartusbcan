@@ -99,6 +99,7 @@ C_SOURCES += Ourwares/SerialTaskReceive.c
 C_SOURCES += Ourtasks/stackwatermark.c
 C_SOURCES += Ourtasks/yscanf.c
 C_SOURCES += Ourtasks/adctask.c
+C_SOURCES += Ourtasks/gateway_PCtoCAN.c
 
 # /* USER CODE END */ 
 

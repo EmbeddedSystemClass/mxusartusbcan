@@ -886,7 +886,7 @@ osDelay(512/4); // Needed for initialization?  Need to investigate.
    //   ptr notification word, number line buffers, size of lines, 
    //   dma buffer size);
 	pbcb = xSerialTaskRxAdduart(&huart6,1,TSK02BIT00,\
-		&noteval,3,96,48);	// 3 line buffers of 96 chars, 48 char total dma buffer 
+		&noteval,3,96,48,0);	// 3 line buffers of 96 chars, 48 total dma, not CAN
 	if (pbcb == NULL) while(1==1);
 
 

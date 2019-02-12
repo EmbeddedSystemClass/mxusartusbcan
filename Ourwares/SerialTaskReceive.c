@@ -15,6 +15,8 @@
 #include "stm32f4xx_hal_usart.h"
 #include "stm32f4xx_hal_uart.h"
 
+#include "gateway_PCtoCAN.h"
+
 /*
 BaseType_t Rret; // Return value
 ...
@@ -61,17 +63,20 @@ struct SERIALRCVBCB
 	UART_HandleTypeDef* phuart;// Pointer to 'MX uart handle
 	osThreadId tskhandle;      // Task handle of originating task
 	uint32_t  notebit;         // Unique notification bit (within task)
-	uint32_t* pnoteval;         // Pointer to word receiving notification 
-	char*  pbegindma;       // Pointer to beginning of dma buffer
-	char*  penddma;         // Pointer to ebd + 1 of dma buffer
-	char*  ptakedma;        // Pointer to last + 1 char taken from dma buffer
+	uint32_t* pnoteval;        // Pointer to word receiving notification 
+	char*  pbegindma;          // Pointer to beginning of dma buffer
+	char*  penddma;            // Pointer to ebd + 1 of dma buffer
+	char*  ptakedma;           // Pointer to last + 1 char taken from dma buffer
 	uint32_t  numlinexsize;    // Number of lines * line size (chars)
-	uint16_t  linesize;        // Number of chars in each line buffer
+	uint16_t  linesize;        // Number of chars in each line buffer (1)
 	uint16_t  dmasize;         // Number of chars in total circular DMA buffer
-	uint8_t   numline;         // Number of line buffers for this uart
-	int8_t    dmaflag;         // dmaflag = 0 for char-by-char mode; 1 = dma mode
+	uint8_t   numline;         // Number of line (or CAN msg) buffers for this uart
+	int8_t    dmaflag;         // dmaflag = 0 for char-by-char mode; 1 = dma mode (1)
+	uint8_t   CANmode;         // 0 = ordinary lines; 1 = ascii/hex CAN
+	struct GATEWAYPCTOCAN* pgptc; // Pointer to gateway_PCtoCAN control block
 	uint32_t errorct;				// uart error callback counter
 };
+
 */
 
 /* Pointer to linked list of Receive Buffer Control Blocks */
@@ -86,7 +91,8 @@ static struct SERIALRCVBCB* prbhd = NULL;
 		uint32_t* pnoteval,\
 		uint8_t   numline,\
 		uint8_t   linesize,\
-		char  dmasize);
+		char  dmasize,\
+		uint8_t   CANmode);
  *	@brief	: Setup circular line buffers this uart
  * @param	: phuart = pointer to uart control block
  * @param	: dmaflag = 0 for char-by-char mode; 1 = dma mode
@@ -95,6 +101,7 @@ static struct SERIALRCVBCB* prbhd = NULL;
  * @param	: numline = number of line buffers in circular line buffer
  * @param	: linesize = number of chars in each line buffer
  * @param	: dmasize = number of chars in total circular DMA buffer
+ * @param	: CANmode = 0 = straight ascii lines; 1 = convert ascii to CAN msgs
  * @return	: pointer = 'RCVBCB for this uart; NULL = failed
  * *************************************************************************/
 struct SERIALRCVBCB* xSerialTaskRxAdduart(\
@@ -104,11 +111,14 @@ struct SERIALRCVBCB* xSerialTaskRxAdduart(\
 		uint32_t* pnoteval,\
 		uint8_t   numline,\
 		uint8_t   linesize,\
-		char  dmasize)
+		char  dmasize,\
+		uint8_t   CANmode)
 {
 	struct SERIALRCVBCB* ptmp1;
 	struct SERIALRCVBCB* ptmp2;
 	char* pbuf;
+
+	struct GATEWAYPCTOCAN* pgptc; // Pointer to Gateway Pc To Can
 
 	/* There can be a problem with Tasks not started if the calling task gets here first */
 	osDelay(10);
@@ -130,6 +140,10 @@ taskENTER_CRITICAL();
 		ptmp2->pnext = ptmp1; // Last block points to added block
 		ptmp1->pnext = ptmp1; // Added (and last) lock points to self
 	}
+
+	/* CAN msg conversion depends on line buffer size being large enough for CAN msg. */
+	if ((CANmode != 0) && (linesize < sizeof(struct CANRCVBUFPLUS))) 
+	     linesize = sizeof(struct CANRCVBUFPLUS);
 
 	/* Get memory for an array of line buffers for this uart */	
 	pbuf = (char*)calloc(numline*linesize, sizeof(char));
@@ -154,6 +168,7 @@ taskENTER_CRITICAL();
 	ptmp1->pwork  = pbuf; // Pointer where next char in active line will be added
 	ptmp1->pworkend = pbuf + linesize - 2; // End of 1st LINE buffer (allow for zero terminator)
 	ptmp1->pend = pbuf + numline*linesize; // End of line buffers + 1 line
+	ptmp1->CANmode = CANmode;
 
 	if (dmaflag != 0)
 	{ // Circular DMA buffer 
@@ -163,6 +178,14 @@ taskENTER_CRITICAL();
 		ptmp1->penddma   = pbuf + dmasize; // Pointer to end + 1
 		ptmp1->ptakedma  = pbuf;   // "Take" Pointer into DMA buffer
 		ptmp1->dmasize   = dmasize; // Total number of chars in DMA buffer
+
+		/* When CANmode is requested, the conversion control block is used */
+		if (CANmode == 1)
+		{ // Initialize CAN conversion control block
+			pgptc = gateway_PCtoCAN_init(ptmp1);
+			if (pgptc == NULL)  {taskEXIT_CRITICAL();return NULL;}
+			ptmp1->pgptc = pgptc; // Save pointer to CAN conversion control block
+		}
 
 		/* Start uart-dma circular mode.  Start once; run forever. */
 		HAL_UART_Receive_DMA(ptmp1->phuart, (uint8_t*)ptmp1->pbegindma, ptmp1->dmasize);
@@ -205,7 +228,14 @@ void StartSerialTaskReceive(void* argument)
 		{
 			if (prtmp->dmaflag != 0)
 			{ // Here, dma mode
-				unloaddma(prtmp);
+				if (prtmp->CANmode == 1)
+				{ // Here, convert to CAN msg buffers
+					gateway_PCtoCAN_unloaddma(prtmp);
+				}
+				else
+				{ // Here, straight ascii line buffers
+					unloaddma(prtmp);
+				}
 			}
 			prtmp2 = prtmp;
 			prtmp++;
@@ -271,7 +301,7 @@ static void advancebuf(struct SERIALRCVBCB* prtmp)
 	prtmp->pwork = prtmp->padd;	// Begin
 	prtmp->pworkend = prtmp->padd + prtmp->linesize - 2; // End
 
-	/* Let originating task know a line is ready. */
+	/* Notify originating task know a line is ready. */
 	xTaskNotifyFromISR(prtmp->tskhandle, 
 		prtmp->notebit,	/* 'or' bit assigned to buffer to notification value. */
 		eSetBits,      /* Set 'or' option */
