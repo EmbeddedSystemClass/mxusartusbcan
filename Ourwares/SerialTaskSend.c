@@ -162,7 +162,7 @@ taskENTER_CRITICAL();
 	{ // No, one or more have been added
 		/* Find end of list */
 		ptmp2 = pbhd;	// Start at head
-		while (ptmp2 != ptmp2->pnext) ptmp2++;
+		while (ptmp2 != ptmp2->pnext) ptmp2 = ptmp2->pnext;
 		ptmp2->pnext = ptmp1; // Last block points to added block
 		ptmp1->pnext = ptmp1; // Added block points to self
 	}

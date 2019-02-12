@@ -34,6 +34,7 @@
 #include "SerialTaskReceive.h"
 #include "yscanf.h"
 #include "adctask.h"
+#include "gateway_PCtoCAN.h"
 
 /* USER CODE END Includes */
 
@@ -851,6 +852,7 @@ void StartTask02(void const * argument)
 	#define TSK02BIT00	(1 << 0)  // Task notification bit for serial input (SerialTaskReceive.c)
 	#define TSK02BIT02	(1 << 2)  // Task notification bit for ADC dma 1st 1/2 (adctask.c)
 	#define TSK02BIT03	(1 << 3)  // Task notification bit for ADC dma end (adctask.c)
+	#define TSK02BIT04	(1 << 4)  // Task notification bit for huart2 incoming ascii CAN
 
 /* Notefication on multiple bits-- 
 
@@ -876,19 +878,23 @@ Bits in 'noteused' are fed back into xTaskNotifyWait, which resets the bits that
 	/* notification bits processed after a 'Wait. */
 	uint32_t noteused = 0;
 
-osDelay(512/4); // Needed for initialization?  Need to investigate.
-
-	/* Setup serial receive for uart (for only this task) */
-	struct SERIALRCVBCB* pbcb;
+	/* Setup serial receive for uarts */
+	struct SERIALRCVBCB* pbcb;		// usart6 (PC minicom->yscanf test)
+	struct SERIALRCVBCB* prbcb2;	// usart2 (PC->CAN msg test)
 
 	/* Setup serial input buffering and line-ready notification */
    //   (ptr uart handle, dma flag, notiification bit, 
    //   ptr notification word, number line buffers, size of lines, 
    //   dma buffer size);
 	pbcb = xSerialTaskRxAdduart(&huart6,1,TSK02BIT00,\
-		&noteval,3,96,48,0);	// 3 line buffers of 96 chars, 48 total dma, not CAN
+		&noteval,3,96,48,0);	// 3 line buffers of 96 chars, 48 total dma, line mode
 	if (pbcb == NULL) while(1==1);
 
+	prbcb2 = xSerialTaskRxAdduart(&huart2,1,TSK02BIT04,\
+		&noteval,12,24,192,1); // buff 12 CAN, of 24 bytes, 192 total dma, CAN mode
+	if (pbcb == NULL) while(1==1);
+
+	struct CANRCVBUFPLUS* pcanp;  // Basic CAN msg Plus error and seq number
 
 	/* Setup serial output for uart. */
 	struct SERIALSENDTASKBCB* pbuf21 = getserialbuf(&huart6,96);
@@ -896,6 +902,9 @@ osDelay(512/4); // Needed for initialization?  Need to investigate.
 	struct SERIALSENDTASKBCB* pbuf25 = getserialbuf(&huart6,64);
 	struct SERIALSENDTASKBCB* pbuf26 = getserialbuf(&huart6,64);
 	struct SERIALSENDTASKBCB* pbuf27 = getserialbuf(&huart6,64);
+	struct SERIALSENDTASKBCB* pbuf28 = getserialbuf(&huart6,64);
+
+osDelay(10); // Some debugging & testing
 
 /* sscanf testing */
 double d1 = 0;
@@ -1019,6 +1028,29 @@ dbgT1=DTWTIME - dbgT0;
 
 				}
 			} while (pline != NULL);
+		}
+
+		/* Handle incoming usart2 carrying ascii/hex CAN msgs */
+		if ((noteval & TSK02BIT04) != 0)
+		{ // Here, one or more CAN msgs have been received
+			noteused |= TSK02BIT04; // We handled the bit
+			do
+			{
+				pcanp = gateway_PCtoCAN_getCAN(prbcb2);
+				if (pcanp != NULL)
+				{
+					/* Check for errors */
+					if (pcanp->error == 0)
+					{
+						/* Place CAN msg on queue for sending to CAN bus */
+						xQueueSendToBack(CanTxQHandle,&pcanp->can,portMAX_DELAY);
+					}
+					else
+					{ // Here, one or more errors
+						yprintf(&pbuf28,"\n\r@@@@@ PC CAN ERROR: 0X%04X",pcanp->error);
+					}
+				}
+			} while ( pcanp != NULL);
 		}
 	}
   /* USER CODE END StartTask02 */

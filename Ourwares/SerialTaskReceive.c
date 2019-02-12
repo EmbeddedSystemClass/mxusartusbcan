@@ -136,7 +136,7 @@ taskENTER_CRITICAL();
 	{ // No. One or more have been added
 		/* Find end of list */
 		ptmp2 = prbhd;	// Start at head
-		while (ptmp2 != ptmp2->pnext) ptmp2++;
+		while (ptmp2 != ptmp2->pnext) ptmp2 = ptmp2->pnext;
 		ptmp2->pnext = ptmp1; // Last block points to added block
 		ptmp1->pnext = ptmp1; // Added (and last) lock points to self
 	}
@@ -210,6 +210,7 @@ void StartSerialTaskReceive(void* argument)
 	/* Do nothing until at least one tasks calls 
       'xSerialTaskRxAdduart' and sets up the 
        uart and buffering. */
+
 	while (prtmp == NULL)
 	{
 		osDelay(10);
@@ -238,7 +239,7 @@ void StartSerialTaskReceive(void* argument)
 				}
 			}
 			prtmp2 = prtmp;
-			prtmp++;
+			prtmp = prtmp2->pnext;
 		} while (prtmp2->pnext != prtmp2);
   }
 }
@@ -330,24 +331,7 @@ static void advanceptr(struct SERIALRCVBCB* prtmp, char c)
 	}	
 	return;
 }
-/* *************************************************************************
- * struct SERIALRCVBCB* getrbcb(UART_HandleTypeDef *phuart);
- * @brief	: Get the rbcb pointer, given the uart handle
- * @return	: NULL = oops!, otherwise pointer to rbcb
- * *************************************************************************/
-struct SERIALRCVBCB* getrbcb(UART_HandleTypeDef *phuart)
-{
-	struct SERIALRCVBCB* prtmp = prbhd;
-	do
-	{
-		if (prtmp->phuart == phuart)
-		{
-			return prtmp;
-		}
-		prtmp++;
-	}	while (prtmp->pnext != prtmp);
-	return NULL;
-}
+
 /* *************************************************************************
  * static void unloaddma(struct SERIALRCVBCB* prbcb);
  * @brief	: DMA: Check for line terminator and store; enter from task poll
@@ -412,7 +396,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *phuart)
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
 	/* Look up buffer control block, given uart handle */
-	struct SERIALRCVBCB* prtmp = getrbcb(phuart);
+	struct SERIALRCVBCB* prtmp = prbhd;
+	while (prtmp->phuart != phuart) prtmp++;
 
 	/* Note char-by-char mode from dma mode. */
 	if (prtmp->dmaflag == 0)
@@ -442,7 +427,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *phuart)
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *phuart)
 {
 	/* Look up buffer control block, given uart handle */
-	struct SERIALRCVBCB* prtmp = getrbcb(phuart);
+	/* Look up buffer control block, given uart handle */
+	struct SERIALRCVBCB* prtmp = prbhd;
+	while (prtmp->phuart != phuart) prtmp++;
 	prtmp->errorct += 1;
 	return;
 }
