@@ -63,7 +63,6 @@ void gateway_CANtoPC(struct SERIALSENDTASKBCB** ppbcb, struct CANRCVBUF* pcan)
 	x += (x >> 16);	// Add carries into high half word
 	x += (x >> 16);	// Add carry if previous add generated a carry
 	x += (x >> 8);  // Add high byte of low half word
-
 	x += (x >> 8);  // Add carry if previous add generated a carry
 
 	/* Convert checksum */

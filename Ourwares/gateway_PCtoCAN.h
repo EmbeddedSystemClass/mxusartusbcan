@@ -17,11 +17,12 @@ void gateway_PCtoCAN_unloaddma(struct SERIALRCVBCB* prbcb);
 /* @brief	: build CAN msgs and add to line buffers for dma data available
  * @return	: prbcb->pgptc->error:
  *          :      0  = no errors
- *          : (1<<1) |= completed, but bad checksum
- *  		   : (1<<2) |= line terminator and state sequence not complete
- *		      : (1<<3) |= sequence number did not mismatch
- *		      : (1<<4) |= too many chars
- *          : (1<<5) |= DLC too large
+ *				: (1<<0) |=  1 not assigned
+ *          : (1<<1) |=  2 completed, but bad checksum
+ *  		   : (1<<2) |=  4 line terminator and state sequence not complete
+ *		      : (1<<3) |=  8 sequence number did not mismatch
+ *		      : (1<<4) |= 10 too many chars
+ *          : (1<<5) |= 20 DLC greater than 8 (too large)
  * ************************************************************************************** */
 struct GATEWAYPCTOCAN* gateway_PCtoCAN_init(struct SERIALRCVBCB* prbcb);
 /* @brief	: Get decode block calloc'd and initialized

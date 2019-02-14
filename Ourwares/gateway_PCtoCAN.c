@@ -22,6 +22,7 @@ struct GATEWAYPCTOCAN
 	uint8_t ctr;            // Data storing counter
 };
 */
+
 static void new_init(struct GATEWAYPCTOCAN* p)
 {
 	/* Initialize for new CAN msg construction */
@@ -56,11 +57,12 @@ struct GATEWAYPCTOCAN* gateway_PCtoCAN_init(struct SERIALRCVBCB* prbcb)
  * @brief	: build CAN msgs and add to line buffers for dma data available
  * @return	: prbcb->pgptc->error:
  *          :      0  = no errors
- *          : (1<<1) |= completed, but bad checksum
- *  		   : (1<<2) |= line terminator and state sequence not complete
- *		      : (1<<3) |= sequence number did not mismatch
- *		      : (1<<4) |= too many chars
- *          : (1<<5) |= DLC too large
+ *				: (1<<0) |=  1 not assigned
+ *          : (1<<1) |=  2 completed, but bad checksum
+ *  		   : (1<<2) |=  4 line terminator and state sequence not complete
+ *		      : (1<<3) |=  8 sequence number did not mismatch
+ *		      : (1<<4) |= 10 too many chars
+ *          : (1<<5) |= 20 DLC greater than 8 (too large)
  * ************************************************************************************** */
 /*  Format of line returned in ptr->c[]:
 incoming ascii expects is--
@@ -118,10 +120,9 @@ void gateway_PCtoCAN_unloaddma(struct SERIALRCVBCB* prbcb)
 	while (diff > 0) // Run until chars available are used up.
 	{
 		diff -= 1;
-		c = *prbcb->ptakedma++; // Get char from dma buffer and advance dma ptr
+		c = *prbcb->ptakedma++; // XGet char from dma buffer and advance dma ptr
 		if (prbcb->ptakedma == prbcb->penddma) prbcb->ptakedma = prbcb->pbegindma;
 			
-
 		/* CAN msg ascii/hex separated with LINETERMINATOR. */
 		// 0x0D takes care of someone typing in stuff with minicom
 		if ((c == 0XD) || (c == LINETERMINATOR))
@@ -160,7 +161,7 @@ void gateway_PCtoCAN_unloaddma(struct SERIALRCVBCB* prbcb)
 			if (p->odd == 1)
 			{ // High order nibble
 				p->odd = 0;
-				p->bin = hexbin[(uint8_t)c] << 8; // Lookup binary, given ascii
+				p->bin = hexbin[(uint8_t)c] << 4; // Lookup binary, given ascii
 			}
 			else
 			{ // Low order nibble completes byte
@@ -210,7 +211,8 @@ void gateway_PCtoCAN_unloaddma(struct SERIALRCVBCB* prbcb)
 					if (p->ctr < p->pcanp->can.dlc)
 					{
 						p->pcanp->can.cd.uc[p->ctr] = p->bin;
-						p->ctr += 1;
+						p->chksumx += p->bin;
+						p->ctr     += 1;
 						break;
 					}
 					/* Here, checksum check.  Complete checksum calculation. */
@@ -218,7 +220,7 @@ void gateway_PCtoCAN_unloaddma(struct SERIALRCVBCB* prbcb)
 					p->chksumx += (p->chksumx >> 16); // Add carry if previous add generated a carry
 					p->chksumx += (p->chksumx >> 8);  // Add high byte of low half word
 					p->chksumx += (p->chksumx >> 8);  // Add carry if previous add generated a carry
-					if (p->chksumx != p->bin)
+					if ((p->chksumx & 0xff) != p->bin)
 					{ // Here, checksums mismatch
 						p->error |=  (1<<1);
 					}
@@ -228,7 +230,7 @@ void gateway_PCtoCAN_unloaddma(struct SERIALRCVBCB* prbcb)
 					if (p->binseq != p->ctrseq)
 					{
 						p->error  |= (1<<3);	// Sequence number mismatch
-						p->binseq = p->ctrseq; // Reset
+						p->ctrseq = p->binseq; // Reset
 					}
 					p->state = 7;
 					break;

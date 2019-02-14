@@ -118,6 +118,8 @@ struct SERIALRCVBCB* xSerialTaskRxAdduart(\
 	struct SERIALRCVBCB* ptmp2;
 	char* pbuf;
 
+HAL_StatusTypeDef halret;
+
 	struct GATEWAYPCTOCAN* pgptc; // Pointer to Gateway Pc To Can
 
 	/* There can be a problem with Tasks not started if the calling task gets here first */
@@ -188,11 +190,21 @@ taskENTER_CRITICAL();
 		}
 
 		/* Start uart-dma circular mode.  Start once; run forever. */
-		HAL_UART_Receive_DMA(ptmp1->phuart, (uint8_t*)ptmp1->pbegindma, ptmp1->dmasize);
+		halret = HAL_UART_Receive_DMA(ptmp1->phuart, (uint8_t*)ptmp1->pbegindma, ptmp1->dmasize);
+		if (halret == HAL_ERROR)
+		{
+			taskEXIT_CRITICAL();
+			return NULL;
+		}
 	}
 	else
 	{ // Start char-by-char mode. Restart upon each interrupt.
-		HAL_UART_Receive_IT(ptmp1->phuart, (uint8_t*)ptmp1->pwork, 1);
+		halret = HAL_UART_Receive_IT(ptmp1->phuart, (uint8_t*)ptmp1->pwork, 1);
+		if (halret == HAL_ERROR)
+		{
+			taskEXIT_CRITICAL();
+			return NULL;
+		}
 	}
 taskEXIT_CRITICAL();
 	return ptmp1;	// Success return pointer to this 'BCB

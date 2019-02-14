@@ -222,11 +222,11 @@ DiscoveryF4 LEDs --
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of myTask02 */
-  osThreadDef(myTask02, StartTask02, osPriorityNormal, 0, 384);
+  osThreadDef(myTask02, StartTask02, osPriorityIdle, 0, 384);
   myTask02Handle = osThreadCreate(osThread(myTask02), NULL);
 
-  /* definition and creation of myTask03 *UART_HandleTypeDef huart6 */
-  osThreadDef(myTask03, StartTask03, osPriorityNormal, 0, 300);
+  /* definition and creation of myTask03 */
+  osThreadDef(myTask03, StartTask03, osPriorityIdle, 0, 300);
   myTask03Handle = osThreadCreate(osThread(myTask03), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -682,8 +682,7 @@ void StartCanTask01(void const * argument)
 		osDelay(LOOPDELAYTICKS);
 		ctr += 1;
 
-//		HAL_GPIO_TogglePin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
-		HAL_GPIO_TogglePin(GPIOD,GPIO_PIN_15); // 
+//		HAL_GPIO_TogglePin(GPIOD,GPIO_PIN_15); // BLUE LED
 
 		/* Old way of outputting a line. */
 #ifdef OLDWAYPRINTF
@@ -886,12 +885,12 @@ Bits in 'noteused' are fed back into xTaskNotifyWait, which resets the bits that
    //   (ptr uart handle, dma flag, notiification bit, 
    //   ptr notification word, number line buffers, size of lines, 
    //   dma buffer size);
-	pbcb = xSerialTaskRxAdduart(&huart6,1,TSK02BIT00,\
-		&noteval,3,96,48,0);	// 3 line buffers of 96 chars, 48 total dma, line mode
-	if (pbcb == NULL) while(1==1);
-
 	prbcb2 = xSerialTaskRxAdduart(&huart2,1,TSK02BIT04,\
-		&noteval,12,24,192,1); // buff 12 CAN, of 24 bytes, 192 total dma, CAN mode
+		&noteval,12,32,128,1); // buff 12 CAN, of 24 bytes, 192 total dma, /CAN mode
+	if (prbcb2 == NULL) while(1==1);
+
+	pbcb  = xSerialTaskRxAdduart(&huart6,1,TSK02BIT00,\
+		&noteval,3,96,48,0);	// 3 line buffers of 96 chars, 48 total dma, line mode
 	if (pbcb == NULL) while(1==1);
 
 	struct CANRCVBUFPLUS* pcanp;  // Basic CAN msg Plus error and seq number
@@ -902,7 +901,7 @@ Bits in 'noteused' are fed back into xTaskNotifyWait, which resets the bits that
 	struct SERIALSENDTASKBCB* pbuf25 = getserialbuf(&huart6,64);
 	struct SERIALSENDTASKBCB* pbuf26 = getserialbuf(&huart6,64);
 	struct SERIALSENDTASKBCB* pbuf27 = getserialbuf(&huart6,64);
-	struct SERIALSENDTASKBCB* pbuf28 = getserialbuf(&huart6,64);
+	struct SERIALSENDTASKBCB* pbuf28 = getserialbuf(&huart6,128);
 
 osDelay(10); // Some debugging & testing
 
@@ -945,6 +944,14 @@ float fadc[5];
 uint64_t* psum;
 uint16_t sumct = 0;
 #define AD 13	// Scale: 16 in seq, plus sumct
+
+	/* Test CAN msg */
+	struct CANTXQMSG testtx;
+	testtx.pctl = pctl1;
+	testtx.can.id = 0xA2200000;
+	testtx.can.dlc = 4;
+	testtx.can.cd.ui[0] = 0x1234;
+
 	for ( ;; )
 	{
 		/* Wait for line completion */
@@ -1034,6 +1041,8 @@ dbgT1=DTWTIME - dbgT0;
 		if ((noteval & TSK02BIT04) != 0)
 		{ // Here, one or more CAN msgs have been received
 			noteused |= TSK02BIT04; // We handled the bit
+
+			/* Remove incoming CAN msgs from PC and queue for output to CAN bus. */
 			do
 			{
 				pcanp = gateway_PCtoCAN_getCAN(prbcb2);
@@ -1043,11 +1052,17 @@ dbgT1=DTWTIME - dbgT0;
 					if (pcanp->error == 0)
 					{
 						/* Place CAN msg on queue for sending to CAN bus */
-						xQueueSendToBack(CanTxQHandle,&pcanp->can,portMAX_DELAY);
+						testtx.can = pcanp->can;
+						xQueueSendToBack(CanTxQHandle,&testtx,portMAX_DELAY);
 					}
 					else
-					{ // Here, one or more errors
-						yprintf(&pbuf28,"\n\r@@@@@ PC CAN ERROR: 0X%04X",pcanp->error);
+					{ // Here, one or more errors. List for the hapless Op to ponder
+						yprintf(&pbuf28,"\n\r@@@@@ PC CAN ERROR: %i 0X%04X, 0X%08X 0X%02X 0X%08X %i 0X%02X 0X%02X %s",pcanp->seq, pcanp->error,\
+							pcanp->can.id,pcanp->can.dlc,pcanp->can.cd.ui[0]);
+
+						/* For test purposes: Place CAN msg on queue for sending to CAN bus */
+						testtx.can = pcanp->can;
+						xQueueSendToBack(CanTxQHandle,&testtx,portMAX_DELAY);
 					}
 				}
 			} while ( pcanp != NULL);
@@ -1144,7 +1159,7 @@ debug03 += 1;	// CAN msg count for Task 01 output
 			}
 		}
 		else
-		{ // Herem (Qret != pdPASS)
+		{ // Here (Qret != pdPASS)
 			debugctr += 1;
 		}
 	}
