@@ -101,6 +101,8 @@ C_SOURCES += Ourtasks/yscanf.c
 C_SOURCES += Ourtasks/adctask.c
 C_SOURCES += Ourtasks/gateway_PCtoCAN.c
 
+C_SOURCES += Ourtasks/morse.c
+
 # /* USER CODE END */ 
 
 # ASM sources

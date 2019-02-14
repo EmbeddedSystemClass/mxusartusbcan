@@ -35,6 +35,7 @@
 #include "yscanf.h"
 #include "adctask.h"
 #include "gateway_PCtoCAN.h"
+#include "morse.h"
 
 /* USER CODE END Includes */
 
@@ -232,7 +233,6 @@ DiscoveryF4 LEDs --
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
 /* =================================================== */
-
 	/* Create serial task (priority) */
 	// Task handle "osThreadId SerialTaskHandle" is global
 	xSerialTaskSendCreate(0);	// Create task and set Task priority
@@ -240,12 +240,12 @@ DiscoveryF4 LEDs --
 	/* Add bcb circular buffer to SerialTaskSend for usart6 */
 	#define NUMCIRBCB6  16 // Size of circular buffer of BCB for usart6
 	ret = xSerialTaskSendAdd(&huart6, NUMCIRBCB6, 0); // char-by-char
-	if (ret < 0) while(1==1); // Maybe add panic led flashing here?
+	if (ret < 0) morse_trap(1);; // Maybe add panic led flashing here?
 
 	/* Add bcb circular buffer to SerialTaskSend for usart2 */
 	#define NUMCIRBCB2  12 // Size of circular buffer of BCB for usart2
 	ret = xSerialTaskSendAdd(&huart2, NUMCIRBCB2, 1); // dma
-	if (ret < 0) while(1==1); // Maybe add panic led flashing here?
+	if (ret < 0) morse_trap(2);; // Maybe add panic led flashing here?
 
 	/* Setup semaphore for yprint and sprintf et al. */
 	yprintf_init();
@@ -258,11 +258,11 @@ DiscoveryF4 LEDs --
 	#define CDCBUFFSIZE 64*16	// Best buff size is multiples of usb packet size
 	struct CDCBUFFPTR* pret;
 	pret = cdc_txbuff_init(NUMCDCBUFF, CDCBUFFSIZE); // Setup local buffers
-	if (pret == NULL) while(1==1);
+	if (pret == NULL) morse_trap(3);;
 	
 	/* USB-CDC queue and task creation */
 	osMessageQId Qidret = xCdcTxTaskSendCreate(3);
-	if (Qidret < 0) while(1==1); // Maybe add panic led flashing here
+	if (Qidret < 0) morse_trap(4);; // Maybe add panic led flashing here
 	
 	/* Start software timer used for usb-cdc initial testing, and Callback01 */
 	osTimerStart (myTimer01Handle, 500);
@@ -274,27 +274,27 @@ DiscoveryF4 LEDs --
 
   /* definition and creation of CanTxTask - CAN driver TX interface. */
   Qidret = xCanTxTaskCreate(0, 32); // CanTask priority, Number of msgs in queue
-	if (Qidret < 0) while(1==1); // Maybe add panic led flashing here?
+	if (Qidret < 0) morse_trap(5);; // Maybe add panic led flashing here?
 
   /* definition and creation of CanRxTask - CAN driver RX interface. */
   Qidret = xCanRxTaskCreate(1, 32); // CanTask priority, Number of msgs in queue
-	if (Qidret < 0) while(1==1); // Maybe add panic led flashing here?
+	if (Qidret < 0) morse_trap(6);; // Maybe add panic led flashing here?
 
 	/* Setup TX linked list for CAN1  */
 	pctl1 = can_iface_init(&hcan1, 64);
-	if (pctl1 == NULL) while(1==1); // Maybe add panic led flashing here?
+	if (pctl1 == NULL) morse_trap(7);; // Maybe add panic led flashing here?
 
 	/* Setup TX linked list for CAN2  */
 	pctl2 = can_iface_init(&hcan2, 8);
-	if (pctl2 == NULL) while(1==1); // Maybe add panic led flashing here?
+	if (pctl2 == NULL) morse_trap(8);; // Maybe add panic led flashing here?
 
 	/* Setup CAN hardware filters to default to accept all ids. */
 	HAL_StatusTypeDef Cret;
 	Cret = canfilter_setup_first(1, &hcan1, 15);
-	if (Cret == HAL_ERROR) while(1==1);
+	if (Cret == HAL_ERROR) morse_trap(9);;
 
 //	Cret = canfilter_setup_first(2, &hcan2, 15);
-//	if (Cret == HAL_ERROR) while(1==1);
+//	if (Cret == HAL_ERROR) morse_trap(10);;
 
 	/* Remove "accept all" and add specific id & mask, or id here. */
 	// See canfilter_setup.h
@@ -665,10 +665,10 @@ static void MX_GPIO_Init(void)
 void StartCanTask01(void const * argument)
 {
 	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart6,96);
-	if (pbuf1 == NULL) while(1==1);
+	if (pbuf1 == NULL) morse_trap(11);;
 
 	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart6,96);
-	if (pbuf1 == NULL) while(1==1);
+	if (pbuf1 == NULL) morse_trap(12);;
 
 	int ctr = 0; // Running count
 
@@ -885,13 +885,16 @@ Bits in 'noteused' are fed back into xTaskNotifyWait, which resets the bits that
    //   (ptr uart handle, dma flag, notiification bit, 
    //   ptr notification word, number line buffers, size of lines, 
    //   dma buffer size);
+
+	/* PC-to-CAN ascii/hex incoming "lines" directly converts to CAN msgs. */
 	prbcb2 = xSerialTaskRxAdduart(&huart2,1,TSK02BIT04,\
 		&noteval,12,32,128,1); // buff 12 CAN, of 24 bytes, 192 total dma, /CAN mode
-	if (prbcb2 == NULL) while(1==1);
+	if (prbcb2 == NULL) morse_trap(13);;
 
+	/* Incoming ascii lines. */
 	pbcb  = xSerialTaskRxAdduart(&huart6,1,TSK02BIT00,\
 		&noteval,3,96,48,0);	// 3 line buffers of 96 chars, 48 total dma, line mode
-	if (pbcb == NULL) while(1==1);
+	if (pbcb == NULL) morse_trap(14);;
 
 	struct CANRCVBUFPLUS* pcanp;  // Basic CAN msg Plus error and seq number
 
@@ -911,8 +914,8 @@ double d2 = 0;
 int64_t nn = 0;
 
 yscanf_init(); // Get semaphore for sscanf
+
 // 3.1415926535897932 3.1415926535897932 10 
-// 3.14 3.14 10
 
 /*
 uint16_t* adctask_init(ADC_HandleTypeDef* phadc,\
@@ -923,7 +926,7 @@ uint16_t* adctask_init(ADC_HandleTypeDef* phadc,\
 */
 	/* Get buffers, "our" control block, and start ADC/DMA running. */
 	struct ADCDMATSKBLK* pblk = adctask_init(&hadc1,TSK02BIT02,TSK02BIT03,&noteval,16);
-	if (pblk == NULL) {HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_SET); while(1==1);}
+	if (pblk == NULL) {HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_SET); morse_trap(15);;}
 
 /* Counts of ADC/DMA interrupts */
 //extern uint32_t Ddma1;
@@ -945,12 +948,9 @@ uint64_t* psum;
 uint16_t sumct = 0;
 #define AD 13	// Scale: 16 in seq, plus sumct
 
-	/* Test CAN msg */
+	/* PC-to-CAN msg */
 	struct CANTXQMSG testtx;
 	testtx.pctl = pctl1;
-	testtx.can.id = 0xA2200000;
-	testtx.can.dlc = 4;
-	testtx.can.cd.ui[0] = 0x1234;
 
 	for ( ;; )
 	{
@@ -984,7 +984,6 @@ uint16_t sumct = 0;
 					sumct = 0;
 				}
 		}
-
 
 		/* Display number of 1st 1/2 DMA interrupts per second. */
 		if ((noteval & TSK02BIT02) != 0)
@@ -1042,7 +1041,7 @@ dbgT1=DTWTIME - dbgT0;
 		{ // Here, one or more CAN msgs have been received
 			noteused |= TSK02BIT04; // We handled the bit
 
-			/* Remove incoming CAN msgs from PC and queue for output to CAN bus. */
+			/* Get incoming CAN msgs from PC and queue for output to CAN bus. */
 			do
 			{
 				pcanp = gateway_PCtoCAN_getCAN(prbcb2);
@@ -1221,7 +1220,7 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-		while(1==1);
+		morse_trap(16);
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
