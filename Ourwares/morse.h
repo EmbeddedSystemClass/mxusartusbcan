@@ -17,8 +17,12 @@ void morse_number(uint32_t n);
  * @param	: nx = number to send
  * *************************************************************************/
 void morse_trap(uint8_t x);
-/*	@brief	: Send a character string as Morse code
+/*	@brief	: Disable interrupts, Send 'x' and endless loop
  * @param	: x = trap number to flash
+ * *************************************************************************/
+void morse_hex(uint32_t n);
+/*	@brief	: Send a  hex number, skip leading zeroes
+ * @param	: nx = number to send
  * *************************************************************************/
 
 #endif

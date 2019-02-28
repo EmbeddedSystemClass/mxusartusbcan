@@ -177,17 +177,52 @@ void morse_number(uint32_t nx)
 }
 /* *************************************************************************
  * void morse_trap(uint8_t x);
- *	@brief	: Send a character string as Morse code
+ *	@brief	: Disable interrupts, Send 'x' and endless loop
  * @param	: x = trap number to flash
  * *************************************************************************/
 void morse_trap(uint8_t x)
 {
-	/* Sisable global interrupts */
+	/* Disable global interrupts */
 __asm__ volatile ("CPSID I");
 	while(1==1)
 	{
 		morse_number(x);
 		delay(TIC_PAUSE,GPIO_PIN_RESET);	
 	}
+}
+/* *************************************************************************
+ * void morse_hex(uint32_t n);
+ *	@brief	: Send a  hex number, skip leading zeroes
+ * @param	: nx = number to send
+ * *************************************************************************/
+static const char h[16] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
+void morse_hex(uint32_t nx)
+{
+	uint8_t c;
+	uint8_t sw = 0;
+	int8_t i;
+
+	morse_generate('X');	// Hex prefix (but skip '0' in front of X)
+
+	uint32_t mask = 0xf0000000;
+
+	if (nx == 0)
+	{
+		morse_generate('0');
+		return;
+	}
+	
+	for (i = 0; i < 8; i++)
+	{
+		if (((nx & mask) != 0) || (sw != 0))
+		{
+			sw = 1;
+			c = h[(nx >> 28)];
+			morse_generate(c);
+		}
+		nx = nx << 4;
+	}  
+	delay(TIC_IWORD,GPIO_PIN_RESET);
+	return;	
 }
 

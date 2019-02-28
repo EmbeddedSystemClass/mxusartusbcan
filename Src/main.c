@@ -92,11 +92,14 @@ DMA_HandleTypeDef hdma_adc1;
 CAN_HandleTypeDef hcan1;
 CAN_HandleTypeDef hcan2;
 
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart6;
 DMA_HandleTypeDef hdma_usart2_tx;
 DMA_HandleTypeDef hdma_usart2_rx;
 DMA_HandleTypeDef hdma_usart6_rx;
+DMA_HandleTypeDef hdma_usart6_tx;
 
 osThreadId defaultTaskHandle;
 osThreadId myTask02Handle;
@@ -120,6 +123,7 @@ static void MX_USART6_UART_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_CAN2_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_TIM2_Init(void);
 void StartDefaultTask(void const * argument);
 void StartTask02(void const * argument);
 void StartTask03(void const * argument);
@@ -170,6 +174,7 @@ int main(void)
   MX_CAN1_Init();
   MX_CAN2_Init();
   MX_ADC1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
 /*
@@ -179,7 +184,6 @@ DiscoveryF4 LEDs --
  GPIOD, GPIO_PIN_14 RED
  GPIOD, GPIO_PIN_15 BLUE
 */
-
   /* USER CODE END 2 */
 
   /* Create the mutex(es) */
@@ -240,12 +244,12 @@ DiscoveryF4 LEDs --
 	/* Add bcb circular buffer to SerialTaskSend for usart6 */
 	#define NUMCIRBCB6  16 // Size of circular buffer of BCB for usart6
 	ret = xSerialTaskSendAdd(&huart6, NUMCIRBCB6, 0); // char-by-char
-	if (ret < 0) morse_trap(1);; // Maybe add panic led flashing here?
+	if (ret < 0) morse_trap(1); // Maybe add panic led flashing here?
 
 	/* Add bcb circular buffer to SerialTaskSend for usart2 */
 	#define NUMCIRBCB2  12 // Size of circular buffer of BCB for usart2
 	ret = xSerialTaskSendAdd(&huart2, NUMCIRBCB2, 1); // dma
-	if (ret < 0) morse_trap(2);; // Maybe add panic led flashing here?
+	if (ret < 0) morse_trap(2); // Maybe add panic led flashing here?
 
 	/* Setup semaphore for yprint and sprintf et al. */
 	yprintf_init();
@@ -258,11 +262,11 @@ DiscoveryF4 LEDs --
 	#define CDCBUFFSIZE 64*16	// Best buff size is multiples of usb packet size
 	struct CDCBUFFPTR* pret;
 	pret = cdc_txbuff_init(NUMCDCBUFF, CDCBUFFSIZE); // Setup local buffers
-	if (pret == NULL) morse_trap(3);;
+	if (pret == NULL) morse_trap(3);
 	
 	/* USB-CDC queue and task creation */
 	osMessageQId Qidret = xCdcTxTaskSendCreate(3);
-	if (Qidret < 0) morse_trap(4);; // Maybe add panic led flashing here
+	if (Qidret < 0) morse_trap(4); // Maybe add panic led flashing here
 	
 	/* Start software timer used for usb-cdc initial testing, and Callback01 */
 	osTimerStart (myTimer01Handle, 500);
@@ -274,27 +278,27 @@ DiscoveryF4 LEDs --
 
   /* definition and creation of CanTxTask - CAN driver TX interface. */
   Qidret = xCanTxTaskCreate(0, 32); // CanTask priority, Number of msgs in queue
-	if (Qidret < 0) morse_trap(5);; // Maybe add panic led flashing here?
+	if (Qidret < 0) morse_trap(5); // Maybe add panic led flashing here?
 
   /* definition and creation of CanRxTask - CAN driver RX interface. */
   Qidret = xCanRxTaskCreate(1, 32); // CanTask priority, Number of msgs in queue
-	if (Qidret < 0) morse_trap(6);; // Maybe add panic led flashing here?
+	if (Qidret < 0) morse_trap(6); // Maybe add panic led flashing here?
 
 	/* Setup TX linked list for CAN1  */
 	pctl1 = can_iface_init(&hcan1, 64);
-	if (pctl1 == NULL) morse_trap(7);; // Maybe add panic led flashing here?
+	if (pctl1 == NULL) morse_trap(7); // Maybe add panic led flashing here?
 
 	/* Setup TX linked list for CAN2  */
 	pctl2 = can_iface_init(&hcan2, 8);
-	if (pctl2 == NULL) morse_trap(8);; // Maybe add panic led flashing here?
+	if (pctl2 == NULL) morse_trap(8); // Maybe add panic led flashing here?
 
 	/* Setup CAN hardware filters to default to accept all ids. */
 	HAL_StatusTypeDef Cret;
 	Cret = canfilter_setup_first(1, &hcan1, 15);
-	if (Cret == HAL_ERROR) morse_trap(9);;
+	if (Cret == HAL_ERROR) morse_trap(9);
 
 //	Cret = canfilter_setup_first(2, &hcan2, 15);
-//	if (Cret == HAL_ERROR) morse_trap(10);;
+//	if (Cret == HAL_ERROR) morse_trap(10);
 
 	/* Remove "accept all" and add specific id & mask, or id here. */
 	// See canfilter_setup.h
@@ -534,6 +538,67 @@ static void MX_CAN2_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 0;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -621,6 +686,9 @@ static void MX_DMA_Init(void)
   /* DMA2_Stream1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 9, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+  /* DMA2_Stream6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream6_IRQn, 8, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream6_IRQn);
 
 }
 
@@ -665,10 +733,10 @@ static void MX_GPIO_Init(void)
 void StartCanTask01(void const * argument)
 {
 	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart6,96);
-	if (pbuf1 == NULL) morse_trap(11);;
+	if (pbuf1 == NULL) morse_trap(11);
 
 	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart6,96);
-	if (pbuf1 == NULL) morse_trap(12);;
+	if (pbuf1 == NULL) morse_trap(12);
 
 	int ctr = 0; // Running count
 
@@ -889,12 +957,12 @@ Bits in 'noteused' are fed back into xTaskNotifyWait, which resets the bits that
 	/* PC-to-CAN ascii/hex incoming "lines" directly converts to CAN msgs. */
 	prbcb2 = xSerialTaskRxAdduart(&huart2,1,TSK02BIT04,\
 		&noteval,12,32,128,1); // buff 12 CAN, of 24 bytes, 192 total dma, /CAN mode
-	if (prbcb2 == NULL) morse_trap(13);;
+	if (prbcb2 == NULL) morse_trap(13);
 
 	/* Incoming ascii lines. */
 	pbcb  = xSerialTaskRxAdduart(&huart6,1,TSK02BIT00,\
 		&noteval,3,96,48,0);	// 3 line buffers of 96 chars, 48 total dma, line mode
-	if (pbcb == NULL) morse_trap(14);;
+	if (pbcb == NULL) morse_trap(14);
 
 	struct CANRCVBUFPLUS* pcanp;  // Basic CAN msg Plus error and seq number
 
@@ -926,7 +994,7 @@ uint16_t* adctask_init(ADC_HandleTypeDef* phadc,\
 */
 	/* Get buffers, "our" control block, and start ADC/DMA running. */
 	struct ADCDMATSKBLK* pblk = adctask_init(&hadc1,TSK02BIT02,TSK02BIT03,&noteval,16);
-	if (pblk == NULL) {HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_SET); morse_trap(15);;}
+	if (pblk == NULL) {HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15,GPIO_PIN_SET); morse_trap(15);}
 
 /* Counts of ADC/DMA interrupts */
 //extern uint32_t Ddma1;
@@ -1176,7 +1244,7 @@ void Callback01(void const * argument)
 
 /**
   * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM5 interrupt took place, inside
+  * @note   This function is called  when TIM14 interrupt took place, inside
   * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
   * a global variable "uwTick" used as application time base.
   * @param  htim : TIM handle
@@ -1187,7 +1255,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM5) {
+  if (htim->Instance == TIM14) {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
