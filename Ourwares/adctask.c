@@ -175,7 +175,7 @@ Ddma1 += 1;
 		if (ptmp->phadc == hadc) break;
 		ptmp++;
 	} while (ptmp->pnext != ptmp);
-	/* Trigger Recieve Task to poll dma uarts */
+	/* Trigger task that processed 1/2 dma */
 	xTaskNotifyFromISR(ptmp->adctaskHandle, 
 		ptmp->notebit1,	/* 'or' bit assigned to buffer to notification value. */
 		eSetBits,      /* Set 'or' option */
@@ -200,7 +200,7 @@ Ddma2 += 1;
 		if (ptmp->phadc == hadc) break;
 		ptmp++;
 	} while (ptmp->pnext != ptmp);
-	/* Trigger Recieve Task to poll dma uarts */
+	/* Trigger task that processed 1/2 dma */
 	xTaskNotifyFromISR(ptmp->adctaskHandle, 
 		ptmp->notebit2,	/* 'or' bit assigned to buffer to notification value. */
 		eSetBits,      /* Set 'or' option */

@@ -849,7 +849,7 @@ xQueueSendToBack(CdcTxTaskSendQHandle,&cdc1,5000);
 	/* Test CAN msg */
 	struct CANTXQMSG testtx;
 	testtx.pctl = pctl1;
-	testtx.can.id = 0xc2200000;
+	testtx.can.id = 0x12200000;
 	testtx.can.dlc = 8;
 	testtx.can.cd.uc[0] = 0x01;
 	int i;

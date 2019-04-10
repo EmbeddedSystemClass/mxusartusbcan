@@ -247,7 +247,9 @@ Setting this bit has no effect when the mailbox is not pending for transmission.
 */
 			pctl->abortflag = 1;	// Set flag for interrupt routine use
 //			CAN_TSR(pctl->vcan) |= CAN_TSR_ABRQ0;	// Set Abort request for mailbox 0.
+			taskEXIT_CRITICAL();
 			HAL_CAN_AbortTxRequest(pctl->phcan, CAN_TX_MAILBOX0);
+			return 0;	// Success!
 		}
 	}
 //	reenable_TXints(save);
