@@ -4,6 +4,11 @@
  * mxusartusbcan.c
  * 02/04/2019
  * Debug & test routines in ../Ourwares directory
+
+05/03/2019 - Experimenting with usb for CAN msgs (/dev/ttyACM0)
+ - When ascii line testing in defaultTask the stack had to be increased
+ - Hack in Task03 uses buffer setup for usart2 output for ACM0.
+   (This should be cleaned up.)
 */
 
 /* USER CODE END Header */
@@ -223,15 +228,15 @@ DiscoveryF4 LEDs --
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 256);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of myTask02 */
-  osThreadDef(myTask02, StartTask02, osPriorityIdle, 0, 384);
+  osThreadDef(myTask02, StartTask02, osPriorityIdle, 0, 512);
   myTask02Handle = osThreadCreate(osThread(myTask02), NULL);
 
   /* definition and creation of myTask03 */
-  osThreadDef(myTask03, StartTask03, osPriorityIdle, 0, 300);
+  osThreadDef(myTask03, StartTask03, osPriorityIdle, 0, 512);
   myTask03Handle = osThreadCreate(osThread(myTask03), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -736,11 +741,11 @@ void StartCanTask01(void const * argument)
 	if (pbuf1 == NULL) morse_trap(11);
 
 	struct SERIALSENDTASKBCB* pbuf2 = getserialbuf(&huart6,96);
-	if (pbuf1 == NULL) morse_trap(12);
+	if (pbuf2 == NULL) morse_trap(12);
 
 	int ctr = 0; // Running count
 
-	double pi = 3.1415926535897932; // Test that floating pt is working
+//	double pi = 3.1415926535897932; // Test that floating pt is working
 
 	uint32_t heapsize;
 
@@ -792,7 +797,7 @@ void StartCanTask01(void const * argument)
 	yprintf(&pbuf2,"\n\rGetFreeHeapSize: %i used: %i",heapsize,(configTOTAL_HEAP_SIZE-heapsize));
 
 	/* Testing fp working */
-	yprintf (&pbuf2,"\n\r\t\t\t\t\typrintf %f test", pi/ctr); // Just a test of uart2
+//	yprintf (&pbuf2,"\n\r\t\t\t\t\typrintf %f test", (M_PIf/ctr)); // Just a test of uart2
 
 	}
 }
@@ -819,8 +824,9 @@ void StartDefaultTask(void const * argument)
 	/* Wait for PC to recognize ACM0 (USB-CDC) */
 	osDelay(1000);
 
+/* Testing usb-cdc with minicom ttyACM0 */
+#define USEACMOSERIALSENDING
 #ifdef USEACMOSERIALSENDING
-/* Testing usb-cdc w minicom ttyACM0 */
 char c[64];
 struct CDCTXTASKBCB cdc1;
 cdc1.pbuf = (uint8_t*)&c[0];
@@ -836,9 +842,6 @@ xQueueSendToBack(CdcTxTaskSendQHandle,&cdc1,5000);
 
 	/* Assign notification bits for this task */
 	#define TSKDEFBUFBIT02 0x4	// Assign notification bit position to ADC ???
-
-	/* FreeRTOS notifications to this task sets bits in this word. */
-//26	uint32_t noteval = 0; 
 
 	/* Malloc a serial buffer control block and buffer. Initial noteval. */
 //2	struct SERIALSENDTASKBCB* pbuf1 = getserialbuf(&huart2,64);
@@ -871,14 +874,14 @@ HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12); // GREEN
 	/* USB-CDC */
 #ifdef USEACMOSERIALSENDING
 xSemaphoreTake( vsnprintfSemaphoreHandle, portMAX_DELAY );
-	cdc1.size = sprintf(c,"DefaultTask: USB-CDC output on /dev/ttyACM0. %i\n\r",ctr);
+	cdc1.size = sprintf(c,"USB-CDC output on /dev/ttyACM0. %i\n\r",ctr);
 xSemaphoreGive( vsnprintfSemaphoreHandle );
-	xQueueSendToBack(CdcTxTaskSendQHandle,&cdc1,5000);
-	mCdcTxQueueBuf(&cdc1);
-	mCdcTxQueueBuf(&cdc1);
-	mCdcTxQueueBuf(&cdc1);
-	mCdcTxQueueBuf(&cdc1);
-	mCdcTxQueueBuf(&cdc1);
+//	xQueueSendToBack(CdcTxTaskSendQHandle,&cdc1,1500);
+//	mCdcTxQueueBuf(&cdc1);
+//	mCdcTxQueueBuf(&cdc1);
+//	mCdcTxQueueBuf(&cdc1);
+//	mCdcTxQueueBuf(&cdc1);
+//	mCdcTxQueueBuf(&cdc1);
 #endif
 
 	/* Some usart testing with usart2. */
@@ -1168,6 +1171,13 @@ uint32_t debugctr_prev = 0;
 extern uint32_t debug1;
 uint32_t debug1prev=debug1;
 
+/* Use usb-cdc for gateway data. */
+#define USEUSBFORCANMSGS
+#ifdef  USEUSBFORCANMSGS
+struct CDCTXTASKBCB cdc2;
+cdc2.pbuf = pbuf3->pbuf;
+#endif
+
 //osDelay(6000); // Debug delay
 
 // DTW Cycles max for--
@@ -1197,6 +1207,11 @@ debug03 += 1;	// CAN msg count for Task 01 output
 	xSemaphoreTake(pbuf3->semaphore, 5000);
 		gateway_CANtoPC(&pbuf3, &ncan.can);
 	vSerialTaskSendQueueBuf(&pbuf3); // Place on queue
+
+#ifdef USEUSBFORCANMSGS
+	cdc2.size = pbuf3->size;
+	xQueueSendToBack(CdcTxTaskSendQHandle,&cdc2,1500);
+#endif
 
 			if ((ncan.can.id == 0x00400000) && (ncan.can.cd.uc[0] == 0))
 			{
