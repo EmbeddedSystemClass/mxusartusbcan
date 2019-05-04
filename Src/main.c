@@ -9,6 +9,11 @@
  - When ascii line testing in defaultTask the stack had to be increased
  - Hack in Task03 uses buffer setup for usart2 output for ACM0.
    (This should be cleaned up.)
+ - Setup with socat--
+hub-server --nodelay 0.0.0.0 32124 &
+socat TCP4:localhost:32124,nodelay FILE:/dev/ttyACM0,b2000000,raw,echo=0,crtscts=0
+cangate 127.0.0.1 32124
+ - Reset causes socat to exit.  Restart program.  Program hangs until socat restarts.
 */
 
 /* USER CODE END Header */
@@ -41,6 +46,9 @@
 #include "adctask.h"
 #include "gateway_PCtoCAN.h"
 #include "morse.h"
+
+// Use usb for sending CAN msgs to PC
+#define USEUSBFORCANMSGS
 
 /* USER CODE END Includes */
 
@@ -825,7 +833,7 @@ void StartDefaultTask(void const * argument)
 	osDelay(1000);
 
 /* Testing usb-cdc with minicom ttyACM0 */
-#define USEACMOSERIALSENDING
+//#define USEACMOSERIALSENDING
 #ifdef USEACMOSERIALSENDING
 char c[64];
 struct CDCTXTASKBCB cdc1;
@@ -876,7 +884,7 @@ HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12); // GREEN
 xSemaphoreTake( vsnprintfSemaphoreHandle, portMAX_DELAY );
 	cdc1.size = sprintf(c,"USB-CDC output on /dev/ttyACM0. %i\n\r",ctr);
 xSemaphoreGive( vsnprintfSemaphoreHandle );
-//	xQueueSendToBack(CdcTxTaskSendQHandle,&cdc1,1500);
+	xQueueSendToBack(CdcTxTaskSendQHandle,&cdc1,1500);
 //	mCdcTxQueueBuf(&cdc1);
 //	mCdcTxQueueBuf(&cdc1);
 //	mCdcTxQueueBuf(&cdc1);
@@ -1172,7 +1180,6 @@ extern uint32_t debug1;
 uint32_t debug1prev=debug1;
 
 /* Use usb-cdc for gateway data. */
-#define USEUSBFORCANMSGS
 #ifdef  USEUSBFORCANMSGS
 struct CDCTXTASKBCB cdc2;
 cdc2.pbuf = pbuf3->pbuf;
